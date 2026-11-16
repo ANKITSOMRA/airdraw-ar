@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AR Gesture Drawing — Touchless Canvas</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- MediaPipe Hands -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════ BOOT SCREEN ═══════════════════════ -->
+<div id="boot-screen">
+  <div class="boot-inner">
+    <div class="boot-logo">
+      <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="40" cy="40" r="36" stroke="url(#g1)" stroke-width="2"/>
+        <path d="M28 52 L28 30 L34 30 L34 44 L40 36 L46 44 L46 30 L52 30 L52 52" stroke="url(#g2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <defs>
+          <linearGradient id="g1" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#00f5d4"/>
+            <stop offset="1" stop-color="#7b2ff7"/>
+          </linearGradient>
+          <linearGradient id="g2" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#00f5d4"/>
+            <stop offset="1" stop-color="#f72fca"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+    <h1 class="boot-title">AR GESTURE DRAW</h1>
+    <p class="boot-sub">Touchless · Real-Time · Spatial</p>
+    <div class="boot-bar-wrap"><div class="boot-bar"></div></div>
+    <p class="boot-status" id="boot-status">Initializing systems…</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════ MAIN APP ═══════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- Background webcam feed -->
+  <video id="webcam" autoplay muted playsinline></video>
+
+  <!-- Mirror overlay indicator -->
+  <div id="mirror-badge" class="badge hidden">⟺ MIRROR</div>
+
+  <!-- Hand tracking overlay canvas -->
+  <canvas id="hand-canvas"></canvas>
+
+  <!-- Drawing canvas -->
+  <canvas id="draw-canvas"></canvas>
+
+  <!-- Unity WebGL container -->
+  <div id="unity-container">
+    <canvas id="unity-canvas"></canvas>
+    <div id="unity-loading-cover">
+      <div class="unity-loading-inner">
+        <div class="unity-spinner"></div>
+        <p id="unity-load-text">Loading Unity Engine…</p>
+        <div class="unity-progress-wrap">
+          <div class="unity-progress-bar" id="unity-progress-bar"></div>
+        </div>
+        <p class="unity-fallback-note" id="unity-fallback-note"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────── FLOATING TOOLBAR ────────── -->
+  <div id="toolbar">
+    <div class="toolbar-brand">
+      <span class="brand-dot"></span>
+      <span>GESTURE DRAW</span>
+    </div>
+
+    <!-- Color picker section -->
+    <div class="tool-group" id="color-group">
+      <label class="tool-label">COLOR</label>
+      <div class="color-swatches" id="color-swatches">
+        <button class="swatch active" data-color="#00f5d4" style="background:#00f5d4" title="Cyan"></button>
+        <button class="swatch" data-color="#f72fca" style="background:#f72fca" title="Magenta"></button>
+        <button class="swatch" data-color="#f7d52f" style="background:#f7d52f" title="Yellow"></button>
+        <button class="swatch" data-color="#2ff75e" style="background:#2ff75e" title="Green"></button>
+        <button class="swatch" data-color="#ff6b35" style="background:#ff6b35" title="Orange"></button>
+        <button class="swatch" data-color="#ffffff" style="background:#ffffff" title="White"></button>
+      </div>
+      <input type="color" id="custom-color" value="#00f5d4" title="Custom color" />
+    </div>
+
+    <!-- Brush size -->
+    <div class="tool-group">
+      <label class="tool-label">BRUSH <span id="brush-val">4</span>px</label>
+      <input type="range" id="brush-slider" min="1" max="20" value="4" class="slider" />
+    </div>
+
+    <!-- Controls row -->
+    <div class="tool-group controls-row">
+      <button id="btn-pause" class="ctrl-btn active" title="Pause drawing">
+        <span class="btn-icon">⏸</span><span class="btn-txt">PAUSE</span>
+      </button>
+      <button id="btn-mirror" class="ctrl-btn" title="Toggle mirror mode">
+        <span class="btn-icon">⟺</span><span class="btn-txt">MIRROR</span>
+      </button>
+    </div>
+
+    <div class="tool-group controls-row">
+      <button id="btn-clear" class="ctrl-btn danger" title="Clear canvas">
+        <span class="btn-icon">🧽</span><span class="btn-txt">CLEAR</span>
+      </button>
+      <button id="btn-save" class="ctrl-btn success" title="Save drawing">
+        <span class="btn-icon">💾</span><span class="btn-txt">SAVE</span>
+      </button>
+    </div>
+
+    <!-- 🔹 Undo button row -->
+    <div class="tool-group controls-row">
+      <button id="btn-undo" class="ctrl-btn undo" title="Undo last stroke (Ctrl+Z)">
+        <span class="btn-icon">↩</span><span class="btn-txt">UNDO</span>
+      </button>
+    </div>
+
+    <!-- Status indicators -->
+    <div class="status-panel">
+      <div class="status-row">
+        <span class="status-dot" id="dot-camera"></span>
+        <span class="status-txt">Camera</span>
+      </div>
+      <div class="status-row">
+        <span class="status-dot" id="dot-hands"></span>
+        <span class="status-txt">Hands</span>
+      </div>
+      <div class="status-row">
+        <span class="status-dot" id="dot-unity"></span>
+        <span class="status-txt">Unity</span>
+      </div>
+      <div class="status-row">
+        <span class="status-dot" id="dot-draw"></span>
+        <span class="status-txt" id="draw-state-txt">Idle</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────── GESTURE HUD ────────── -->
+  <div id="gesture-hud">
+    <div id="gesture-icon">✋</div>
+    <div id="gesture-label">No Hand</div>
+    <!-- 🔹 Active finger indicator -->
+    <div id="finger-label" class="finger-label">✦ Index</div>
+  </div>
+
+  <!-- ────────── FINGER CURSOR ────────── -->
+  <div id="finger-cursor"></div>
+
+  <!-- ────────── HELP OVERLAY ────────── -->
+  <div id="help-overlay">
+    <div class="help-inner">
+      <h2>HOW TO USE</h2>
+      <ul>
+        <li><strong>☝️ Index Up</strong> — Draw on canvas</li>
+        <li><strong>✊ Fist</strong> — Stop drawing / lift pen</li>
+        <li><strong>✌️ Two fingers</strong> — Erase mode</li>
+        <li><strong>🖐 Open hand</strong> — Clear canvas (hold 2s)</li>
+        <li><strong>👍 Thumb Up</strong> — Cycle brush color</li>
+        <li><strong>↖ Swipe Left</strong> — Undo last stroke</li>
+        <li><strong>Ctrl+Z</strong> — Undo (keyboard)</li>
+        <li><strong>Space</strong> — Pause / Resume</li>
+        <li><strong>S</strong> — Save drawing</li>
+      </ul>
+      <div class="help-tip">
+        💡 If index finger isn't detected, the most extended finger is used automatically.
+      </div>
+      <button id="help-close">GOT IT</button>
+    </div>
+  </div>
+  <button id="help-btn" title="Help">?</button>
+
+</div><!-- /app -->
+
+<script src="script.js"></script>
+</body>
+</html>
